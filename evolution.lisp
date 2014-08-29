@@ -17,7 +17,38 @@
 
 (defstruct animal x y energy rep-energy dir genes)
 
+(defclass animal ()
+  ((x
+    :init-arg x
+    :init-form (random *width*)
+    :accessor animal-x)
+   (y
+    :init-arg y
+    :init-form (random *height*)
+    :accessor animal-y)
+   (energy
+    :init-arg energy
+    :init-form 1000
+    :accessor animal-energy)
+   (rep-energy
+    :init-arg rep-energy
+    :reader rep-energy)
+   (dir
+    :init-form 0
+    :accessor animal-dir)
+   (speed
+    :init-form 1
+    :reader animal-speed)
+   (genes
+    :init-arg genes
+    :init-form (loop repeat 8
+                    collecting (1+ random 10)))))
+
 (defstruct (carnivore (:include animal)) (combat 1))
+
+(defclass carnivore (animal)
+  (rep-energy
+   :init-form 400))
 
 ;; (defstruct (omnivore (:include animal) :meat-bonus 0.5))
 
