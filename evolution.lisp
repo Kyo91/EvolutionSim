@@ -1,3 +1,5 @@
+(defpackage :evolution)
+
 ;; Evolution Game
 (defparameter *width* 100)
 (defparameter *height* 30)
@@ -15,83 +17,104 @@
   (apply #'random-plant *jungle*)
   (random-plant 0 0 *width* *height*))
 
-(defstruct animal x y energy rep-energy dir genes)
+;; (defstruct animal x y energy rep-energy dir genes)
+;; (defstruct (carnivore (:include animal)) (combat 1))
+;; (defstruct (omnivore (:include animal) :meat-bonus 0.5))
 
 (defclass animal ()
   ((x
-    :init-arg x
-    :init-form (random *width*)
+    :initarg :x
+    :initform (random *width*)
     :accessor animal-x)
    (y
-    :init-arg y
-    :init-form (random *height*)
+    :initarg :y
+    :initform (random *height*)
     :accessor animal-y)
+   (char
+    :initarg :char
+    :initform #\X
+    :reader animal-char)
    (energy
-    :init-arg energy
-    :init-form 1000
+    :initarg :energy
+    :initform 1000
     :accessor animal-energy)
    (rep-energy
-    :init-arg rep-energy
+    :initarg :rep-energy
     :reader rep-energy)
    (dir
-    :init-form 0
+    :initform 0
     :accessor animal-dir)
    (speed
-    :init-form 1
+    :initform 1
     :reader animal-speed)
+   (combat
+    :initarg :combat
+    :initform 0)
    (genes
-    :init-arg genes
-    :init-form (loop repeat 8
-                    collecting (1+ random 10)))))
+    :initarg :genes
+    :initform (loop repeat 8
+                 collecting (1+ (random 10)))
+    :accessor animal-genes)))
 
-(defstruct (carnivore (:include animal)) (combat 1))
 
 (defclass carnivore (animal)
-  (rep-energy
-   :init-form 400))
+  ((rep-energy
+    :initform 400)
+   (char
+    :initform #\C)))
 
-;; (defstruct (omnivore (:include animal) :meat-bonus 0.5))
+(defclass herbivore (animal)
+  ((rep-energy
+    :initform 200)
+   (char
+    :initform #\H)))
 
-;; (defparameter *animals*
-;;   (list (make-animal :x      (ash *width*  -1)
-;;                      :y      (ash *height* -1)
-;;                      :energy 1000
-;;                      :rep-energy 200
-;;                      :dir    0
-;;                      :genes  (loop repeat 8
-;;                                    collecting (1+ (random 10))))
-;;         (make-carnivore :x      (ash *width*  -2)
-;;                         :y      (ash *height* -2)
-;;                         :energy 1000
-;;                         :rep-energy 400
-;;                         :dir    0
-;;                         :genes (loop repeat 8
-;;                                     collecting (1+ (random 10))))))
+(defclass omnivore (animal)
+  ((meat-bonus
+    :initarg :meat-bonus
+    :initform 0.5)
+   (char
+    :initform #\O)))
+
+
+
+
 (defparameter *animals* nil)
 
+;; (defun init-evolution ()
+;;   (setf *width* 100)
+;;   (setf *height* 30)
+;;   (setf *jungle* '(45 10 10 10))
+;;   (setf *plant-energy* 80)
+;;   (setf *plants* (make-hash-table :test #'equal))
+;;   (setf *animals*
+;;         (list (make-animal    :x      (ash *width*  -1)
+;;                               :y      (ash *height* -1)
+;;                               :energy 1000
+;;                               :rep-energy 200
+;;                               :dir    0
+;;                               :genes  (loop repeat 8
+;;                                       collecting (1+ (random 10))))
+;;               (make-carnivore :x      (+ (ash *width*  -1) 10)
+;;                               :y      (+ (ash *height* -1) 10)
+;;                               :energy 1000
+;;                               :rep-energy 400
+;;                               :dir    0
+;;                               :genes (loop repeat 8
+;;                                         collecting (1+ (random 10))))))
+;;   (setf *animal-pos* (make-hash-table :test #'equal)))
+
 (defun init-evolution ()
+  (set-starting-params))
+
+
+(defun set-starting-params ()
   (setf *width* 100)
   (setf *height* 30)
   (setf *jungle* '(45 10 10 10))
   (setf *plant-energy* 80)
   (setf *plants* (make-hash-table :test #'equal))
-  (setf *animals*
-        (list (make-animal    :x      (ash *width*  -1)
-                              :y      (ash *height* -1)
-                              :energy 1000
-                              :rep-energy 200
-                              :dir    0
-                              :genes  (loop repeat 8
-                                      collecting (1+ (random 10))))
-              (make-carnivore :x      (+ (ash *width*  -1) 10)
-                              :y      (+ (ash *height* -1) 10)
-                              :energy 1000
-                              :rep-energy 400
-                              :dir    0
-                              :genes (loop repeat 8
-                                        collecting (1+ (random 10))))))
   (setf *animal-pos* (make-hash-table :test #'equal)))
-
 
 ;; (defparameter *animals*
 ;;   (let ((tab (make-hash-table))
