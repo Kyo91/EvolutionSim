@@ -259,3 +259,6 @@
                            do (princ #\.))
                    (update-world))
                (evolution))))))
+
+(defmethod pretty-print ((m animal))
+  (format t "Animal:~&~10tChief Species: ~a~&~10tGenes: ~a~%~%" (type-of m) (animal-genes m)))
