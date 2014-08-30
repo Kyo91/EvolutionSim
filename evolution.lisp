@@ -73,6 +73,8 @@
   ((meat-bonus
     :initarg :meat-bonus
     :initform 0.5)
+   (rep-energy
+    :initform 600)
    (char
     :initform #\O)))
 
@@ -81,31 +83,16 @@
 
 (defparameter *animals* nil)
 
-;; (defun init-evolution ()
-;;   (setf *width* 100)
-;;   (setf *height* 30)
-;;   (setf *jungle* '(45 10 10 10))
-;;   (setf *plant-energy* 80)
-;;   (setf *plants* (make-hash-table :test #'equal))
-;;   (setf *animals*
-;;         (list (make-animal    :x      (ash *width*  -1)
-;;                               :y      (ash *height* -1)
-;;                               :energy 1000
-;;                               :rep-energy 200
-;;                               :dir    0
-;;                               :genes  (loop repeat 8
-;;                                       collecting (1+ (random 10))))
-;;               (make-carnivore :x      (+ (ash *width*  -1) 10)
-;;                               :y      (+ (ash *height* -1) 10)
-;;                               :energy 1000
-;;                               :rep-energy 400
-;;                               :dir    0
-;;                               :genes (loop repeat 8
-;;                                         collecting (1+ (random 10))))))
-;;   (setf *animal-pos* (make-hash-table :test #'equal)))
 
 (defun init-evolution ()
-  (set-starting-params))
+  (set-starting-params)
+  (setf *animals*
+        (list (make-instance 'herbivore
+                             :x (ash *width*  -1)
+                             :y (ash *height* -1))
+              (make-instance 'carnivore
+                             :x (+ (ash *width*  -1) 10)
+                             :y (+ (ash *height* -1) 10)))))
 
 
 (defun set-starting-params ()
@@ -116,24 +103,6 @@
   (setf *plants* (make-hash-table :test #'equal))
   (setf *animal-pos* (make-hash-table :test #'equal)))
 
-;; (defparameter *animals*
-;;   (let ((tab (make-hash-table))
-;;         (herb (make-animal :x          (ash *width*  -1)
-;;                            :y          (ash *height* -1)
-;;                            :energy     1000
-;;                            :rep-energy 200
-;;                            :dir        0
-;;                            :genes      (loop repeat 8
-;;                                             collecting (1+ (random 10)))))
-;;         (carn (make-carnivore :x          (ash *width*  -2)
-;;                               :y          (ash *height* -2)
-;;                               :energy     1000
-;;                               :rep-energy 400
-;;                               :dir        0
-;;                               :genes      (loop repeat 8
-;;                                                collecting (1+ (random 10))))))
-;;     (setf (gethash herb *animals*) 't)
-;;     (setf (gethash carn *animals*) 't)))
 
 (defun move (animal)
   (let ((dir (animal-dir animal))
@@ -168,7 +137,7 @@
             (mod (+ (animal-dir animal) (angle (animal-genes animal) x))
                  8)))))
 
-(defmethod eat ((m animal))
+(defmethod eat ((m herbivore))
   (let ((pos (cons (animal-x m) (animal-y m))))
     (when (gethash pos *plants*)
       (incf (animal-energy m) *plant-energy*)
@@ -182,45 +151,74 @@
       (setf (animal-energy prey) 0)
       (setf (gethash pos *animal-pos*) (remove prey (gethash pos *animal-pos*))))))
 
-;; (defun find-prey (carn pos list)
-;;   (cond
-;;     ((null list) '())
-;;     (t (let* ((curr (car list))
-;;               (apos (cons (animal-x curr) (animal-y curr))))
-;;          (cond
-;;            ((and (equal pos apos) (not (equal
-;;                                         (type-of carn)
-;;                                         (type-of curr))))
-;;             curr)
-;;            (t (find-prey carn pos (cdr list))))))))
+
 (defun find-prey (carn pos tab)
   (let ((animals (gethash pos tab)))
-    (find-if-not (lambda (animal) (equal (type-of animal) (type-of carn))) animals)))
+    (find-if-not (lambda (animal) (equal (type-of animal) 'carnivore)) animals)))
 
 ;; (defparameter *reproduction-energy* 200)
 
+;; (defmethod reproduce ((m animal))
+;;   (let ((e (animal-energy m)))
+;;     (when (>= e (rep-energy m))
+;;       (setf (animal-energy m) (ash e -1))
+;;       (let ((animal-nu (copy-structure m))
+;;             (genes     (copy-list (animal-genes m)))
+;;             (mutation  (random 8)))
+;;         (setf (nth mutation genes) (max 1 (+ (nth mutation genes) (random 3) -1)))
+;;         (setf (animal-genes animal-nu) genes)
+;;         (push animal-nu *animals*)))))
+(defun mutate-genes (genes)
+  (let ((mutation (random 8)))
+    (setf (nth mutation genes) (max 1 (+ (nth mutation genes) (random 3)  -1)))
+    genes))
+
+
 (defmethod reproduce ((m animal))
   (let ((e (animal-energy m)))
-    (when (>= e (animal-rep-energy m))
+    (when (>= e (rep-energy m))
       (setf (animal-energy m) (ash e -1))
-      (let ((animal-nu (copy-structure m))
-            (genes     (copy-list (animal-genes m)))
-            (mutation  (random 8)))
-        (setf (nth mutation genes) (max 1 (+ (nth mutation genes) (random 3) -1)))
-        (setf (animal-genes animal-nu) genes)
+      (let ((animal-nu
+             (make-instance (class-of m)
+                            :x     (animal-x m)
+                            :y     (animal-y m)
+                            :energy (ash e -1)
+                            :genes (mutate-genes (copy-list (animal-genes m))))))
         (push animal-nu *animals*)))))
 
+;; (defun update-world ()
+;;   (setf *animals* (remove-if (lambda (animal)
+;;                                (<= (animal-energy animal) 0))
+;;                              *animals*))
+;;   (mapc (lambda (animal)
+;;           (turn animal)
+;;           (move animal)
+;;           (eat animal)
+;;           (reproduce animal))
+;;         *animals*)
+;;   (add-plants))
+
 (defun update-world ()
-  (setf *animals* (remove-if (lambda (animal)
-                               (<= (animal-energy animal) 0))
-                             *animals*))
-  (mapc (lambda (animal)
-          (turn animal)
-          (move animal)
-          (eat animal)
-          (reproduce animal))
-        *animals*)
-  (add-plants))
+  (labels ((kill-dead (animals)
+             (if animals
+                 (let* ((animal (car animals))
+                        (x (animal-x animal))
+                        (y (animal-y animal)))
+                   (cond ((<= (animal-energy animal) 0)
+                          (progn (setf (gethash (cons x y) *animal-pos*)
+                                       (remove animal (gethash (cons x y) *animal-pos*)))
+                                 (kill-dead (cdr animals))))
+                         (t (cons animal (kill-dead (cdr animals))))
+                         )))))
+    (setf *animals* (kill-dead *animals*))
+    (mapc (lambda (animal)
+            (turn animal)
+            (move animal)
+            (eat animal)
+            (reproduce animal))
+          *animals*)
+    (add-plants)))
+
 
 (defun draw-world ()
   (loop for y
@@ -229,20 +227,22 @@
                   (princ "|")
                   (loop for x
                         below *width*
-                        do (princ (cond ((some (lambda (animal)
-                                                 (and (= (animal-x animal) x)
-                                                      (= (animal-y animal) y)
-                                                      (equal (type-of animal) 'animal)))
-                                               *animals*)
-                                         #\M)
-                                        ((some (lambda (animal)
-                                                 (and (= (animal-x animal) x)
-                                                      (= (animal-y animal) y)
-                                                      (equal (type-of animal) 'carnivore)))
-                                               *animals*)
-                                         #\C)
-                                        ((gethash (cons x y) *plants*) #\*)
-                                         (t #\space))))
+                        do (princ (cond ;; ((some (lambda (animal)
+                                        ;;          (and (= (animal-x animal) x)
+                                        ;;               (= (animal-y animal) y)
+                                        ;;               (equal (type-of animal) 'animal)))
+                                        ;;        *animals*)
+                                        ;;  #\M)
+                                        ;; ((some (lambda (animal)
+                                        ;;          (and (= (animal-x animal) x)
+                                        ;;               (= (animal-y animal) y)
+                                        ;;               (equal (type-of animal) 'carnivore)))
+                                        ;;        *animals*)
+                                        ;;  #\C)
+                                    ((gethash (cons x y) *animal-pos*)
+                                     (animal-char (car (gethash (cons x y) *animal-pos*))))
+                                    ((gethash (cons x y) *plants*) #\*)
+                                    (t #\space))))
                   (princ "|"))))
 
 (defun evolution ()
