@@ -152,12 +152,12 @@
       (setf (gethash pos *animal-pos*) (remove prey (gethash pos *animal-pos*))))))
 
 ;; TODO: Change just removing m from prey list to removing all animals "similar" to m.
-(defmethod eat ((m animal))
-  (let* ((pos (cons (animal-x m) (animal-y m)))
-         (prey (remove m (gethash pos *animal-pos*))))
-    (when prey
-        (let ((target (nth (random (length prey)) prey)))
-          (combat-roll m target)))))
+;; (defmethod eat ((m animal))
+;;   (let* ((pos (cons (animal-x m) (animal-y m)))
+;;          (prey (find-prey m pos *animal-pos*)))
+;;     (when prey
+;;       (let ((target (nth (random (length prey)) prey)))
+;;         (combat-roll m target)))))
 
 
 ;; TODO: Remove animals from hashtable in addition to killing them
@@ -180,7 +180,7 @@
 
 (defun find-prey (carn pos tab)
   (let ((animals (gethash pos tab)))
-    (find-if-not (lambda (animal) (equal (type-of animal) 'carnivore)) animals)))
+    (find-if-not (lambda (animal) (equal (type-of animal) (type-of carn))) animals)))
 
 ;; (defparameter *reproduction-energy* 200)
 
