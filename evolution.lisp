@@ -92,7 +92,12 @@
                              :y (ash *height* -1))
               (make-instance 'carnivore
                              :x (+ (ash *width*  -1) 10)
-                             :y (+ (ash *height* -1) 10)))))
+                             :y (+ (ash *height* -1) 10))))
+  (loop for animal in *animals*
+     doing (setf (gethash (cons (animal-x animal)
+                                (animal-y animal))
+                            *animal-pos*)
+                   (list animal))))
 
 
 (defun set-starting-params ()
@@ -145,31 +150,36 @@
 
 (defmethod eat ((m animal))
   (let* ((pos (cons (animal-x m) (animal-y m)))
-         (prey (find-prey m pos *animal-pos*)))
+         (prey (car (find-prey m pos *animal-pos*))))
     (when prey
       (incf (animal-energy m) (ash (animal-energy prey) -1))
       (setf (animal-energy prey) 0)
       (setf (gethash pos *animal-pos*) (remove prey (gethash pos *animal-pos*))))))
 
-;; TODO: Change just removing m from prey list to removing all animals "similar" to m.
+;; ;; TODO: Change just removing m from prey list to removing all animals "similar" to m.
 ;; (defmethod eat ((m animal))
 ;;   (let* ((pos (cons (animal-x m) (animal-y m)))
 ;;          (prey (find-prey m pos *animal-pos*)))
 ;;     (when prey
 ;;       (let ((target (nth (random (length prey)) prey)))
-;;         (combat-roll m target)))))
+;;         (combat-roll m target pos)))))
 
 
 ;; TODO: Remove animals from hashtable in addition to killing them
-(defun combat-roll (m1 m2)
+(defun combat-roll (m1 m2 pos)
   (let ((roll (random (+ 1 (combat m1) (combat m2)))))
     (cond
       ((= roll 0) (progn
                     (setf (animal-energy m1) 0)
-                    (setf (animal-energy m2) 0)))
+                    (setf (animal-energy m2) 0)
+                    (format nil "Tie")))
       ((< roll (combat m1)) (progn
                               (incf (animal-energy m1) (animal-energy m2))
-                              (setf (animal-energy m2) 0))))))
+                              (setf (animal-energy m2) 0)
+                              (setf (gethash pos *animal-pos*)
+                                    (remove m2 (gethash pos *animal-pos*)))
+                              (format nil "m1 wins!")))
+      (t (format nil "m2 won, no one died")))))
 
 (defmethod eat ((m herbivore))
   (let ((pos (cons (animal-x m) (animal-y m))))
@@ -180,7 +190,7 @@
 
 (defun find-prey (carn pos tab)
   (let ((animals (gethash pos tab)))
-    (find-if-not (lambda (animal) (equal (type-of animal) (type-of carn))) animals)))
+    (remove-if (lambda (animal) (equal (type-of animal) (type-of carn))) animals)))
 
 ;; (defparameter *reproduction-energy* 200)
 
