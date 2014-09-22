@@ -59,9 +59,7 @@
   ((rep-energy
     :initform 400)
    (char
-    :initform #\C)
-   (combat
-    :initform (+ 5 (random 5)))))
+    :initform #\C)))
 
 (defclass herbivore (animal)
   ((rep-energy
@@ -70,11 +68,12 @@
     :initform #\H)))
 
 (defclass omnivore (animal)
-  ((meat-bonus
-    :initarg :meat-bonus
-    :initform 0.5)
+  ((food-multiplier
+    :initarg :food-multiplier
+    :initform 0.5
+    :accessor multiplier)
    (rep-energy
-    :initform 600)
+    :initform 300)
    (char
     :initform #\O)))
 
@@ -92,12 +91,19 @@
                              :y (ash *height* -1))
               (make-instance 'carnivore
                              :x (+ (ash *width*  -1) 10)
-                             :y (+ (ash *height* -1) 10))))
+                             :y (+ (ash *height* -1) 10)
+                             :combat 10)
+              (make-instance 'omnivore
+                             :x (- (ash *width*  -1) 10)
+                             :y (- (ash *height* -1) 10)
+                             :combat 5)
+              ))
   (loop for animal in *animals*
      doing (setf (gethash (cons (animal-x animal)
                                 (animal-y animal))
                             *animal-pos*)
-                   (list animal))))
+                   (list animal)))
+  *animals*)
 
 
 (defun set-starting-params ()
@@ -157,6 +163,9 @@
 ;;       (setf (gethash pos *animal-pos*) (remove prey (gethash pos *animal-pos*))))))
 
 ;; TODO: Change just removing m from prey list to removing all animals "similar" to m.
+(defgeneric eat (animal)
+  (:documentation "Method for allowing animals to eat and gain energy."))
+
 (defmethod eat ((m animal))
   (let* ((pos (cons (animal-x m) (animal-y m)))
          (prey (find-prey m pos *animal-pos*)))
@@ -164,21 +173,33 @@
       (let ((target (nth (random (length prey)) prey)))
         (combat-roll m target pos)))))
 
+(defmethod eat ((m omnivore))
+  (let ((pos (cons (animal-x m) (animal-y m))))
+    (when (gethash pos *plants*)
+      (incf (animal-energy m) (* (max 0 (- 1 (multiplier m))) *plant-energy*))
+      (remhash pos *plants*))
+    (let ((prey (find-prey m pos *animal-pos*)))
+      (when prey
+        (let ((target (nth (random (length prey)) prey)))
+          (combat-roll m target pos (multiplier m)))))))
+
 
 ;; TODO: Remove animals from hashtable in addition to killing them
-(defun combat-roll (m1 m2 pos)
-  (let ((roll (random (+ 1 (combat m1) (combat m2)))))
+(defun combat-roll (m1 m2 pos &optional (mult 1))
+  (let* ((c1  (ash (combat m1) 2))
+         (c2 (truncate (combat m2)))
+         (roll (random (+ 1 c1 c2))))
     (cond
       ((= roll 0) (progn
                     (setf (animal-energy m1) 0)
                     (setf (animal-energy m2) 0)
                     (format nil "Tie")))
-      ((< roll (combat m1)) (progn
-                              (incf (animal-energy m1) (animal-energy m2))
-                              (setf (animal-energy m2) 0)
-                              (setf (gethash pos *animal-pos*)
-                                    (remove m2 (gethash pos *animal-pos*)))
-                              (format nil "m1 wins!")))
+      ((< roll c1) (progn
+                     (incf (animal-energy m1) (* mult (animal-energy m2)))
+                     (setf (animal-energy m2) 0)
+                     (setf (gethash pos *animal-pos*)
+                           (remove m2 (gethash pos *animal-pos*)))
+                     (format nil "m1 wins!")))
       (t (format nil "m2 won, no one died")))))
 
 (defmethod eat ((m herbivore))
@@ -188,9 +209,9 @@
       (remhash pos *plants*))))
 
 
-(defun find-prey (carn pos tab)
+(defun find-prey (hunter pos tab)
   (let ((animals (gethash pos tab)))
-    (remove-if (lambda (animal) (equal (type-of animal) (type-of carn))) animals)))
+    (remove-if (lambda (animal) (equal (type-of animal) (type-of hunter))) animals)))
 
 ;; (defparameter *reproduction-energy* 200)
 
@@ -209,9 +230,18 @@
     (setf (nth mutation genes) (max 1 (+ (nth mutation genes) (random 3)  -1)))
     genes))
 
-
 (defmethod reproduce ((m animal))
-  (let ((e (animal-energy m)))
+  (reproduce-helper m 1))
+
+(defmethod reproduce ((m carnivore))
+  (reproduce-helper m 2))
+
+(defmethod reproduce ((m herbivore))
+  (reproduce-helper m 0.5))
+
+(defmethod reproduce ((m omnivore))
+  (let ((e (round (animal-energy m)))
+        (combat-change 1))
     (when (>= e (rep-energy m))
       (setf (animal-energy m) (ash e -1))
       (let ((animal-nu
@@ -219,7 +249,28 @@
                             :x     (animal-x m)
                             :y     (animal-y m)
                             :energy (ash e -1)
-                            :genes (mutate-genes (copy-list (animal-genes m))))))
+                            :genes (mutate-genes (copy-list (animal-genes m)))
+                            :combat (max 0 (+ (round (- (random (1+ combat-change))
+                                                        (/ combat-change 2)))
+                                              (combat m)))
+                            :food-multiplier (max 0 (min 1 (+ (- (random 0.2)
+                                                                 0.1)
+                                                              (multiplier m)))))))
+        (push animal-nu *animals*)))))
+
+(defun reproduce-helper (m combat-change)
+  (let ((e (round (animal-energy m))))
+    (when (>= e (rep-energy m))
+      (setf (animal-energy m) (ash e -1))
+      (let ((animal-nu
+             (make-instance (class-of m)
+                            :x     (animal-x m)
+                            :y     (animal-y m)
+                            :energy (ash e -1)
+                            :genes (mutate-genes (copy-list (animal-genes m)))
+                            :combat (max 0 (+ (round (- (random (1+ combat-change))
+                                                        (/ combat-change 2)))
+                                              (combat m))))))
         (push animal-nu *animals*)))))
 
 ;; (defun update-world ()
@@ -284,5 +335,21 @@
                    (update-world))
                (evolution))))))
 
+;; Convenvient functions for debugging/testing code
+
 (defmethod pretty-print ((m animal))
-  (format t "Animal:~&~10tChief Species: ~a~&~10tGenes: ~a~%~%" (type-of m) (animal-genes m)))
+  (format t "Animal:~&~10tChief Species: ~a~&~10tGenes: ~a~&~10tEnergy: ~a~%~%" (type-of m) (animal-genes m) (animal-energy m)))
+
+(defun print-combats (animals)
+  (loop for m in animals doing (format t "~a  ~a~&" (type-of m) (combat m))))
+
+(defun species (s animals)
+  (remove-if-not (lambda (x) (equal (type-of x) s)) animals))
+
+(defun skip (n)
+  (dotimes (_ n) (update-world)))
+
+(defun start ()
+  (progn
+    (init-evolution)
+    (evolution)))
