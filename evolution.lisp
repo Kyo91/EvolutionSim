@@ -17,9 +17,6 @@
   (apply #'random-plant *jungle*)
   (random-plant 0 0 *width* *height*))
 
-;; (defstruct animal x y energy rep-energy dir genes)
-;; (defstruct (carnivore (:include animal)) (combat 1))
-;; (defstruct (omnivore (:include animal) :meat-bonus 0.5))
 
 (defclass animal ()
   ((x
@@ -49,7 +46,8 @@
     :reader animal-speed)
    (combat
     :initarg :combat
-    :initform 0)
+    :initform (random 10)
+    :accessor combat)
    (genes
     :initarg :genes
     :initform (loop repeat 8
@@ -61,7 +59,9 @@
   ((rep-energy
     :initform 400)
    (char
-    :initform #\C)))
+    :initform #\C)
+   (combat
+    :initform (+ 5 (random 5)))))
 
 (defclass herbivore (animal)
   ((rep-energy
@@ -137,19 +137,45 @@
             (mod (+ (animal-dir animal) (angle (animal-genes animal) x))
                  8)))))
 
-(defmethod eat ((m herbivore))
-  (let ((pos (cons (animal-x m) (animal-y m))))
-    (when (gethash pos *plants*)
-      (incf (animal-energy m) *plant-energy*)
-      (remhash pos *plants*))))
+;; Eating:
+;; Carnivorous behavior is the common/default form of eating for animals.
+;; Only herbivores make an acception in that they will only hunt for plants, ignoring other animals.
+;; Eating will be determined based on combat ability, the same way that genes work. A loss in combat
+;; will result on the death of the loser if the winner is not an herbivore.
 
-(defmethod eat ((m carnivore))
+(defmethod eat ((m animal))
   (let* ((pos (cons (animal-x m) (animal-y m)))
          (prey (find-prey m pos *animal-pos*)))
     (when prey
       (incf (animal-energy m) (ash (animal-energy prey) -1))
       (setf (animal-energy prey) 0)
       (setf (gethash pos *animal-pos*) (remove prey (gethash pos *animal-pos*))))))
+
+;; TODO: Change just removing m from prey list to removing all animals "similar" to m.
+(defmethod eat ((m animal))
+  (let* ((pos (cons (animal-x m) (animal-y m)))
+         (prey (remove m (gethash pos *animal-pos*))))
+    (when prey
+        (let ((target (nth (random (length prey)) prey)))
+          (combat-roll m target)))))
+
+
+;; TODO: Remove animals from hashtable in addition to killing them
+(defun combat-roll (m1 m2)
+  (let ((roll (random (+ 1 (combat m1) (combat m2)))))
+    (cond
+      ((= roll 0) (progn
+                    (setf (animal-energy m1) 0)
+                    (setf (animal-energy m2) 0)))
+      ((< roll (combat m1)) (progn
+                              (incf (animal-energy m1) (animal-energy m2))
+                              (setf (animal-energy m2) 0))))))
+
+(defmethod eat ((m herbivore))
+  (let ((pos (cons (animal-x m) (animal-y m))))
+    (when (gethash pos *plants*)
+      (incf (animal-energy m) *plant-energy*)
+      (remhash pos *plants*))))
 
 
 (defun find-prey (carn pos tab)
@@ -227,22 +253,10 @@
                   (princ "|")
                   (loop for x
                         below *width*
-                        do (princ (cond ;; ((some (lambda (animal)
-                                        ;;          (and (= (animal-x animal) x)
-                                        ;;               (= (animal-y animal) y)
-                                        ;;               (equal (type-of animal) 'animal)))
-                                        ;;        *animals*)
-                                        ;;  #\M)
-                                        ;; ((some (lambda (animal)
-                                        ;;          (and (= (animal-x animal) x)
-                                        ;;               (= (animal-y animal) y)
-                                        ;;               (equal (type-of animal) 'carnivore)))
-                                        ;;        *animals*)
-                                        ;;  #\C)
-                                    ((gethash (cons x y) *animal-pos*)
-                                     (animal-char (car (gethash (cons x y) *animal-pos*))))
-                                    ((gethash (cons x y) *plants*) #\*)
-                                    (t #\space))))
+                     do (princ (cond ((gethash (cons x y) *animal-pos*)
+                                      (animal-char (car (gethash (cons x y) *animal-pos*))))
+                                     ((gethash (cons x y) *plants*) #\*)
+                                     (t #\space))))
                   (princ "|"))))
 
 (defun evolution ()
