@@ -148,21 +148,21 @@
 ;; Eating will be determined based on combat ability, the same way that genes work. A loss in combat
 ;; will result on the death of the loser if the winner is not an herbivore.
 
-(defmethod eat ((m animal))
-  (let* ((pos (cons (animal-x m) (animal-y m)))
-         (prey (car (find-prey m pos *animal-pos*))))
-    (when prey
-      (incf (animal-energy m) (ash (animal-energy prey) -1))
-      (setf (animal-energy prey) 0)
-      (setf (gethash pos *animal-pos*) (remove prey (gethash pos *animal-pos*))))))
-
-;; ;; TODO: Change just removing m from prey list to removing all animals "similar" to m.
 ;; (defmethod eat ((m animal))
 ;;   (let* ((pos (cons (animal-x m) (animal-y m)))
-;;          (prey (find-prey m pos *animal-pos*)))
+;;          (prey (car (find-prey m pos *animal-pos*))))
 ;;     (when prey
-;;       (let ((target (nth (random (length prey)) prey)))
-;;         (combat-roll m target pos)))))
+;;       (incf (animal-energy m) (ash (animal-energy prey) -1))
+;;       (setf (animal-energy prey) 0)
+;;       (setf (gethash pos *animal-pos*) (remove prey (gethash pos *animal-pos*))))))
+
+;; TODO: Change just removing m from prey list to removing all animals "similar" to m.
+(defmethod eat ((m animal))
+  (let* ((pos (cons (animal-x m) (animal-y m)))
+         (prey (find-prey m pos *animal-pos*)))
+    (when prey
+      (let ((target (nth (random (length prey)) prey)))
+        (combat-roll m target pos)))))
 
 
 ;; TODO: Remove animals from hashtable in addition to killing them
