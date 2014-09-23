@@ -5,9 +5,10 @@
 (defparameter *height* 30)
 (defparameter *jungle* '(45 10 10 10))
 (defparameter *plant-energy* 80)
-
+(defparameter *animals* nil)
 (defparameter *plants* (make-hash-table :test #'equal))
 (defparameter *animal-pos* (make-hash-table :test #'equal))
+
 
 (defun random-plant (left top width height)
   (let ((pos (cons (+ left (random width)) (+ top (random height)))))
@@ -76,11 +77,6 @@
     :initform 250)
    (char
     :initform #\O)))
-
-
-
-
-(defparameter *animals* nil)
 
 
 (defun init-evolution ()
@@ -229,6 +225,14 @@
   (let ((mutation (random 8)))
     (setf (nth mutation genes) (max 1 (+ (nth mutation genes) (random 3)  -1)))
     genes))
+
+(defun genetic-difference (s1 s2)
+  (let ((g1 (animal-genes s1))
+        (g2 (animal-genes s2)))
+    (sqrt (loop for i in g1
+             for j in g2
+             summing (* (- j i) (- j i))))))
+
 
 (defmethod reproduce ((m animal))
   (reproduce-helper m 1))
@@ -391,8 +395,17 @@
     (init-evolution)
     (evolution)))
 
-;; (defun quick-1k ()
-;;   (progn
-;;     (start)
-;;     (skip 1000)
-;;     (draw-world)))
+
+;; Functions for collecting/processing statistical data on species
+(defun find-differences (m animals)
+           (remove 0.0 (loop for s in animals
+                          collecting (genetic-difference m s))))
+
+(defun find-all-differences (animals)
+  (loop for n in animals collecting (find-differences n animals)))
+
+(defun median (nums)
+  (nth (round (/ (length nums) 2)) (sort nums #'<)))
+
+(defun average (nums)
+  (/ (loop for n in nums summing n) (length nums)))
