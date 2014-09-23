@@ -53,7 +53,10 @@
     :initarg :genes
     :initform (loop repeat 8
                  collecting (1+ (random 10)))
-    :accessor animal-genes)))
+    :accessor animal-genes)
+   (age
+    :initform 0
+    :accessor age)))
 
 
 (defclass carnivore (animal)
@@ -177,12 +180,12 @@
     (let ((prey (find-prey m pos *animal-pos*)))
       (when prey
         (let ((target (nth (random (length prey)) prey)))
-          (combat-roll m target pos (multiplier m)))))))
+          (combat-roll m target pos 0 (multiplier m)))))))
 
 
 ;; TODO: Remove animals from hashtable in addition to killing them
-(defun combat-roll (m1 m2 pos &optional (mult 1))
-  (let* ((c1  (ash (combat m1) 2))
+(defun combat-roll (m1 m2 pos &optional (chance 1) (mult 1))
+  (let* ((c1  (ash (combat m1) chance))
          (c2 (truncate (combat m2)))
          (roll (random (+ 1 c1 c2))))
     (cond
@@ -207,7 +210,9 @@
 
 (defun find-prey (hunter pos tab)
   (let ((animals (gethash pos tab)))
-    (remove-if (lambda (animal) (equal (type-of animal) (type-of hunter))) animals)))
+    (remove-if-not (lambda (animal) (or (equal (type-of animal) 'herbivore)
+                                   (< 10.0 (genetic-difference animal hunter))))
+                   animals)))
 
 ;; (defparameter *reproduction-energy* 200)
 
@@ -257,9 +262,8 @@
                             :combat (max 0 (+ (round (- (random (1+ combat-change))
                                                         (/ combat-change 2)))
                                               (combat m)))
-                            :food-multiplier (max 0 (min 1 (+ (- (random 0.2)
-                                                                 0.1)
-                                                              (multiplier m)))))))
+                            :food-multiplier  (+ (- (random 0.2) 0.1)
+                                                 (multiplier m)))))
         (push animal-nu *animals*)))))
 
 (defun reproduce-helper (m combat-change)
@@ -281,37 +285,28 @@
 ;; Most of this can be simplified immensely if we create a function to return herbivore/carnivore
 ;; instead of duplicating this entire let body & declaration
 (defun mutate-species (s)
-  (when (eq (type-of s) 'omnivore)
-    (let ((m (multiplier s)))
-      (cond
-        ((< 0.1 m) (let* ((x (animal-x s))
-                        (y (animal-y s))
-                        (e (animal-energy s))
-                        (genes (copy-list (animal-genes s)))
-                        (combat (combat s))
-                        (s-nu (make-instance 'herbivore
-                                             :x x
-                                             :y y
-                                             :energy e
-                                             :genes genes
-                                             :combat combat)))
-                   (setf (gethash (cons x y) *animal-pos*)
-                         (cons s-nu (remove s (gethash (cons x y) *animal-pos*))))
-                   (setf *animals* (cons s-nu (remove s *animals*)))))
-        ((> 0.9 m) (let* ((x (animal-x s))
-                          (y (animal-y s))
-                          (e (animal-energy s))
-                          (genes (copy-list (animal-genes s)))
-                          (combat (combat s))
-                          (s-nu (make-instance 'carnivore
-                                               :x x
-                                               :y y
-                                               :energy e
-                                               :genes genes
-                                               :combat combat)))
-                     (setf (gethash (cons x y) *animal-pos*)
-                           (cons s-nu (remove s (gethash (cons x y) *animal-pos*))))
-                     (setf *animals* (cons s-nu (remove s *animals*)))))))))
+  (labels ((new-species (sym)
+             (let* ((x (animal-x s))
+                               (y (animal-y s))
+                               (e (animal-energy s))
+                               (genes (copy-list (animal-genes s)))
+                               (combat (combat s))
+                               (s-nu (make-instance sym
+                                                    :x x
+                                                    :y y
+                                                    :energy e
+                                                    :genes genes
+                                                    :combat combat)))
+                          (setf (gethash (cons x y) *animal-pos*)
+                                (cons s-nu (remove s (gethash (cons x y) *animal-pos*))))
+                          (setf *animals* (cons s-nu (remove s *animals*))))))
+    (cond ((eq (type-of s) 'omnivore)
+           (let ((m (multiplier s)))
+             (cond
+               ((> 0.4 m) (new-species 'herbivore))
+               ((< 0.6 m) (new-species 'carnivore)))))
+          ((< (animal-energy s) 5)
+           (new-species 'omnivore)))))
 
 ;; (defun update-world ()
 ;;   (setf *animals* (remove-if (lambda (animal)
@@ -331,7 +326,8 @@
                  (let* ((animal (car animals))
                         (x (animal-x animal))
                         (y (animal-y animal)))
-                   (cond ((<= (animal-energy animal) 0)
+                   (cond ((or (> (age animal) 1000)
+                              (<= (animal-energy animal) 0))
                           (progn (setf (gethash (cons x y) *animal-pos*)
                                        (remove animal (gethash (cons x y) *animal-pos*)))
                                  (kill-dead (cdr animals))))
@@ -402,10 +398,12 @@
                           collecting (genetic-difference m s))))
 
 (defun find-all-differences (animals)
-  (loop for n in animals collecting (find-differences n animals)))
+  (loop for n in animals collecting (cons n (find-differences n animals))))
 
 (defun median (nums)
   (nth (round (/ (length nums) 2)) (sort nums #'<)))
 
 (defun average (nums)
   (/ (loop for n in nums summing n) (length nums)))
+
+;; TODO create function to find most "average" species (one with all lowest genetic diffs)
