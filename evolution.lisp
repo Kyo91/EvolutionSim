@@ -57,7 +57,7 @@
 
 (defclass carnivore (animal)
   ((rep-energy
-    :initform 400)
+    :initform 350)
    (char
     :initform #\C)))
 
@@ -73,7 +73,7 @@
     :initform 0.5
     :accessor multiplier)
    (rep-energy
-    :initform 300)
+    :initform 250)
    (char
     :initform #\O)))
 
@@ -273,6 +273,42 @@
                                               (combat m))))))
         (push animal-nu *animals*)))))
 
+
+;; Most of this can be simplified immensely if we create a function to return herbivore/carnivore
+;; instead of duplicating this entire let body & declaration
+(defun mutate-species (s)
+  (when (eq (type-of s) 'omnivore)
+    (let ((m (multiplier s)))
+      (cond
+        ((< 0.1 m) (let* ((x (animal-x s))
+                        (y (animal-y s))
+                        (e (animal-energy s))
+                        (genes (copy-list (animal-genes s)))
+                        (combat (combat s))
+                        (s-nu (make-instance 'herbivore
+                                             :x x
+                                             :y y
+                                             :energy e
+                                             :genes genes
+                                             :combat combat)))
+                   (setf (gethash (cons x y) *animal-pos*)
+                         (cons s-nu (remove s (gethash (cons x y) *animal-pos*))))
+                   (setf *animals* (cons s-nu (remove s *animals*)))))
+        ((> 0.9 m) (let* ((x (animal-x s))
+                          (y (animal-y s))
+                          (e (animal-energy s))
+                          (genes (copy-list (animal-genes s)))
+                          (combat (combat s))
+                          (s-nu (make-instance 'carnivore
+                                               :x x
+                                               :y y
+                                               :energy e
+                                               :genes genes
+                                               :combat combat)))
+                     (setf (gethash (cons x y) *animal-pos*)
+                           (cons s-nu (remove s (gethash (cons x y) *animal-pos*))))
+                     (setf *animals* (cons s-nu (remove s *animals*)))))))))
+
 ;; (defun update-world ()
 ;;   (setf *animals* (remove-if (lambda (animal)
 ;;                                (<= (animal-energy animal) 0))
@@ -302,7 +338,8 @@
             (turn animal)
             (move animal)
             (eat animal)
-            (reproduce animal))
+            (reproduce animal)
+            (mutate-species animal))
           *animals*)
     (add-plants)))
 
@@ -353,3 +390,9 @@
   (progn
     (init-evolution)
     (evolution)))
+
+;; (defun quick-1k ()
+;;   (progn
+;;     (start)
+;;     (skip 1000)
+;;     (draw-world)))
