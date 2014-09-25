@@ -95,7 +95,7 @@
    (char
     :initform #\C)
    (max-age
-    :initform 1500)))
+    :initform 1000)))
 
 (defclass herbivore (animal)
   ((rep-energy
@@ -103,7 +103,7 @@
    (char
     :initform #\H)
    (max-age
-    :initform 500)))
+    :initform 1000)))
 
 (defclass omnivore (animal)
   ((food-multiplier
@@ -378,7 +378,7 @@
                  (let* ((animal (car animals))
                         (x (animal-x animal))
                         (y (animal-y animal)))
-                   (cond ((or (> (age animal) 1000)
+                   (cond ((or ;; (> (age animal) 1000)
                               (<= (animal-energy animal) 0))
                           (progn (setf (gethash (cons x y) *animal-pos*)
                                        (remove animal (gethash (cons x y) *animal-pos*)))
