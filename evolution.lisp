@@ -1,13 +1,26 @@
-(defpackage :evolution)
+(defpackage :evolution
+  (:use :common-lisp))
+
+(in-package :evolution)
 
 ;; Evolution Game
 (defparameter *width* 100)
-(defparameter *height* 30)
-(defparameter *jungle* '(45 10 10 10))
+(defparameter *height* 60)
+(defparameter *jungles* '())
 (defparameter *plant-energy* 80)
-(defparameter *animals* nil)
 (defparameter *plants* (make-hash-table :test #'equal))
+(defparameter *animals* nil)
 (defparameter *animal-pos* (make-hash-table :test #'equal))
+
+(defun set-starting-params ()
+  (defparameter *width* 100)
+  (defparameter *height* 60)
+  (defparameter *jungles* '())
+  (defparameter *plant-energy* 80)
+  (defparameter *plants* (make-hash-table :test #'equal))
+  (defparameter *animals* nil)
+  (defparameter *animal-pos* (make-hash-table :test #'equal)))
+
 
 
 (defun random-plant (left top width height)
@@ -15,8 +28,19 @@
     (setf (gethash pos *plants*) t)))
 
 (defun add-plants ()
-  (apply #'random-plant *jungle*)
-  (random-plant 0 0 *width* *height*))
+  (progn
+    (loop for jungle in *jungles*
+         do (apply #'random-plant jungle))
+    (random-plant 0 0 *width* *height*)))
+
+(defun spawn-jungles ()
+  (labels ((jungle (x y)
+             (push (list x y 10 10) *jungles*)))
+    (jungle (- (ash *width*  -1) 5)
+            (- (ash *height* -1) 5))
+    (loop repeat (/ (* *width* *height*) 3000)
+         do (jungle (random (- *width*  10))
+                    (random (- *height* 10))))))
 
 
 (defclass animal ()
@@ -56,20 +80,30 @@
     :accessor animal-genes)
    (age
     :initform 0
-    :accessor age)))
+    :accessor age)
+   (max-age
+    :accessor max-age)
+   (parent
+    :initarg :parent
+    :initform '()
+    :accessor parent)))
 
 
 (defclass carnivore (animal)
   ((rep-energy
     :initform 350)
    (char
-    :initform #\C)))
+    :initform #\C)
+   (max-age
+    :initform 1500)))
 
 (defclass herbivore (animal)
   ((rep-energy
     :initform 200)
    (char
-    :initform #\H)))
+    :initform #\H)
+   (max-age
+    :initform 500)))
 
 (defclass omnivore (animal)
   ((food-multiplier
@@ -79,24 +113,29 @@
    (rep-energy
     :initform 250)
    (char
-    :initform #\O)))
+    :initform #\O)
+   (max-age
+    :initform 300)))
 
 
 (defun init-evolution ()
   (set-starting-params)
+  (spawn-jungles)
   (setf *animals*
-        (list (make-instance 'herbivore
-                             :x (ash *width*  -1)
-                             :y (ash *height* -1))
-              (make-instance 'carnivore
-                             :x (+ (ash *width*  -1) 10)
-                             :y (+ (ash *height* -1) 10)
-                             :combat 10)
-              (make-instance 'omnivore
-                             :x (- (ash *width*  -1) 10)
-                             :y (- (ash *height* -1) 10)
-                             :combat 5)
-              ))
+        (append (loop repeat (+ 5 (random 5))
+                   collect (make-instance 'herbivore
+                                          :x (1+ (random *width*))
+                                          :y (1+ (random *height*))))
+                (loop repeat (+ 1 (random 5))
+                   collect (make-instance 'carnivore
+                                    :x (+ (ash *width*  -1) 10)
+                                    :y (+ (ash *height* -1) 10)
+                                    :combat 10)
+                      ;; (make-instance 'omnivore
+                      ;;                :x (- (ash *width*  -1) 10)
+                      ;;                :y (- (ash *height* -1) 10)
+                      ;;                :combat 5)
+                      )))
   (loop for animal in *animals*
      doing (setf (gethash (cons (animal-x animal)
                                 (animal-y animal))
@@ -105,13 +144,6 @@
   *animals*)
 
 
-(defun set-starting-params ()
-  (setf *width* 100)
-  (setf *height* 30)
-  (setf *jungle* '(45 10 10 10))
-  (setf *plant-energy* 80)
-  (setf *plants* (make-hash-table :test #'equal))
-  (setf *animal-pos* (make-hash-table :test #'equal)))
 
 
 (defun move (animal)
@@ -175,12 +207,12 @@
 (defmethod eat ((m omnivore))
   (let ((pos (cons (animal-x m) (animal-y m))))
     (when (gethash pos *plants*)
-      (incf (animal-energy m) (* (max 0 (- 1 (multiplier m))) *plant-energy*))
+      (incf (animal-energy m) (* (mod (* (multiplier m) 4) 1) *plant-energy*))
       (remhash pos *plants*))
     (let ((prey (find-prey m pos *animal-pos*)))
       (when prey
         (let ((target (nth (random (length prey)) prey)))
-          (combat-roll m target pos 0 (multiplier m)))))))
+          (combat-roll m target pos 0 (/ (multiplier m) 4)))))))
 
 
 ;; TODO: Remove animals from hashtable in addition to killing them
@@ -210,8 +242,11 @@
 
 (defun find-prey (hunter pos tab)
   (let ((animals (gethash pos tab)))
-    (remove-if-not (lambda (animal) (or (equal (type-of animal) 'herbivore)
-                                   (< 10.0 (genetic-difference animal hunter))))
+    (remove-if-not (lambda (animal) (and (or (and (equal (type-of animal) 'herbivore)
+                                             (equal (type-of hunter) 'carnivore))
+                                        (< 10.0 (genetic-difference animal hunter))
+                                        )
+                                    (not (equal animal (parent hunter)))))
                    animals)))
 
 ;; (defparameter *reproduction-energy* 200)
@@ -239,22 +274,55 @@
              summing (* (- j i) (- j i))))))
 
 
-(defmethod reproduce ((m animal))
-  (reproduce-helper m 1))
+;; (defmethod reproduce ((m animal))
+;;   (reproduce-helper m 1))
+
+;; (defmethod reproduce ((m carnivore))
+;;   (if (= 0 (random 1000))
+;;       (reproduce-helper m 2 'omnivore)
+;;       (reproduce-helper m 2)))
+
+;; (defmethod reproduce ((m herbivore))
+;;   (when (= 0 (random 1000))
+;;     (reproduce-helper m 1 'omnivore)
+;;     (reproduce-helper m 1)))
 
 (defmethod reproduce ((m carnivore))
   (reproduce-helper m 2))
 
 (defmethod reproduce ((m herbivore))
-  (reproduce-helper m 0.5))
+  (reproduce-helper m 1))
 
 (defmethod reproduce ((m omnivore))
   (let ((e (round (animal-energy m)))
         (combat-change 1))
     (when (>= e (rep-energy m))
       (setf (animal-energy m) (ash e -1))
+      (let* ((mult-nu (+ (- (random 0.2) 0.1)
+                         (multiplier m)))
+             (animal-nu
+              (make-instance 'omnivore
+                             :x     (animal-x m)
+                             :y     (animal-y m)
+                             :energy (ash e -1)
+                             :genes (mutate-genes (copy-list (animal-genes m)))
+                             :combat (max 0 (+ (round (- (random (1+ combat-change))
+                                                         (/ combat-change 2)))
+                                               (combat m)))
+                             :food-multiplier  mult-nu
+                             :parent m)))
+        (let ((r (random 10)))
+          (cond
+            ((= r 0) (reproduce-helper m 1 'herbivore))
+            ((= r 9) (reproduce-helper m 1 'carnivore))
+            (t (push animal-nu *animals*))))))))
+
+(defun reproduce-helper (m combat-change &optional (s (class-of m)))
+  (let ((e (round (animal-energy m))))
+    (when (>= e (rep-energy m))
+      (setf (animal-energy m) (ash e -1))
       (let ((animal-nu
-             (make-instance (class-of m)
+             (make-instance s
                             :x     (animal-x m)
                             :y     (animal-y m)
                             :energy (ash e -1)
@@ -262,51 +330,35 @@
                             :combat (max 0 (+ (round (- (random (1+ combat-change))
                                                         (/ combat-change 2)))
                                               (combat m)))
-                            :food-multiplier  (+ (- (random 0.2) 0.1)
-                                                 (multiplier m)))))
-        (push animal-nu *animals*)))))
-
-(defun reproduce-helper (m combat-change)
-  (let ((e (round (animal-energy m))))
-    (when (>= e (rep-energy m))
-      (setf (animal-energy m) (ash e -1))
-      (let ((animal-nu
-             (make-instance (class-of m)
-                            :x     (animal-x m)
-                            :y     (animal-y m)
-                            :energy (ash e -1)
-                            :genes (mutate-genes (copy-list (animal-genes m)))
-                            :combat (max 0 (+ (round (- (random (1+ combat-change))
-                                                        (/ combat-change 2)))
-                                              (combat m))))))
+                            :parent m)))
         (push animal-nu *animals*)))))
 
 
 ;; Most of this can be simplified immensely if we create a function to return herbivore/carnivore
 ;; instead of duplicating this entire let body & declaration
-(defun mutate-species (s)
-  (labels ((new-species (sym)
-             (let* ((x (animal-x s))
-                               (y (animal-y s))
-                               (e (animal-energy s))
-                               (genes (copy-list (animal-genes s)))
-                               (combat (combat s))
-                               (s-nu (make-instance sym
-                                                    :x x
-                                                    :y y
-                                                    :energy e
-                                                    :genes genes
-                                                    :combat combat)))
-                          (setf (gethash (cons x y) *animal-pos*)
-                                (cons s-nu (remove s (gethash (cons x y) *animal-pos*))))
-                          (setf *animals* (cons s-nu (remove s *animals*))))))
-    (cond ((eq (type-of s) 'omnivore)
-           (let ((m (multiplier s)))
-             (cond
-               ((> 0.4 m) (new-species 'herbivore))
-               ((< 0.6 m) (new-species 'carnivore)))))
-          ((< (animal-energy s) 5)
-           (new-species 'omnivore)))))
+;; (defun mutate-species (s)
+;;   (labels ((new-species (sym)
+;;              (let* ((x (animal-x s))
+;;                                (y (animal-y s))
+;;                                (e (animal-energy s))
+;;                                (genes (copy-list (animal-genes s)))
+;;                                (combat (combat s))
+;;                                (s-nu (make-instance sym
+;;                                                     :x x
+;;                                                     :y y
+;;                                                     :energy e
+;;                                                     :genes genes
+;;                                                     :combat combat)))
+;;                           (setf (gethash (cons x y) *animal-pos*)
+;;                                 (cons s-nu (remove s (gethash (cons x y) *animal-pos*))))
+;;                           (setf *animals* (cons s-nu (remove s *animals*))))))
+;;     (cond ((eq (type-of s) 'omnivore)
+;;            (let ((m (multiplier s)))
+;;              (cond
+;;                ((> 0.4 m) (new-species 'herbivore))
+;;                ((< 0.6 m) (new-species 'carnivore)))))
+;;           ((< (animal-energy s) 5)
+;;            (new-species 'omnivore)))))
 
 ;; (defun update-world ()
 ;;   (setf *animals* (remove-if (lambda (animal)
@@ -337,9 +389,11 @@
     (mapc (lambda (animal)
             (turn animal)
             (move animal)
+            (incf (age animal))
             (eat animal)
             (reproduce animal)
-            (mutate-species animal))
+            ;; (mutate-species animal)
+            )
           *animals*)
     (add-plants)))
 
@@ -397,13 +451,22 @@
            (remove 0.0 (loop for s in animals
                           collecting (genetic-difference m s))))
 
+;; (defun find-all-differences (animals)
+;;   (loop for n in animals collecting (cons n (find-differences n animals))))
+
 (defun find-all-differences (animals)
-  (loop for n in animals collecting (cons n (find-differences n animals))))
+  (let ((tab (make-hash-table :test #'equal)))
+    (loop for n in animals
+         doing (setf (gethash n tab) (find-differences n animals)))
+    tab))
 
 (defun median (nums)
   (nth (round (/ (length nums) 2)) (sort nums #'<)))
 
 (defun average (nums)
-  (/ (loop for n in nums summing n) (length nums)))
+  (loop for n in nums
+     summing n into total
+       counting n into len
+       finally (return (/ total len))))
 
 ;; TODO create function to find most "average" species (one with all lowest genetic diffs)
